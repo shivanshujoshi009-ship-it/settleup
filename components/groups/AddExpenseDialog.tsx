@@ -81,10 +81,10 @@ async function handleCreate() {
 
     try {
       setLoading(true);
-const exactAmountsNum = Object.fromEntries(
+      const exactAmountsNum: Record<string, number> = Object.fromEntries(
         Object.entries(exactAmounts).map(([key, value]) => [key, Number(value)])
       );
-await createExpense(groupId, {
+   await createExpense(groupId, {
   title,
   amount: Number(amount),
   category,
@@ -149,77 +149,120 @@ await createExpense(groupId, {
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white"
               />
-               <div>
-  <label className="mb-2 block text-sm text-slate-300">
-    Split Type
-  </label>
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">
+                  Split Type
+                </label>
 
-  <select
-  value={splitType}
-  onChange={(e) => setSplitType(e.target.value)}
-  className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white"
->
-  <option value="EQUAL">Equal</option>
-  <option value="EXACT">Exact Amount</option>
-</select>
-</div>
+                <select
+                  value={splitType}
+                  onChange={(e) => setSplitType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white"
+                >
+                  <option value="EQUAL">Equal</option>
+                  <option value="EXACT">Exact Amount</option>
+                  <option value="PERCENTAGE">Percentage</option>
+                </select>
+              </div>
 
-<div>
-  <label className="mb-2 block text-sm text-slate-300">
-    Participants
-  </label>
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">
+                  Participants
+                </label>
 
-  <div className="space-y-2 rounded-xl border border-slate-700 p-3">
+                <div className="space-y-2 rounded-xl border border-slate-700 p-3">
+                  {members.map((member) => {
+                    const displayName =
+                      member.user?.name ??
+                      member.name ??
+                      "Guest";
 
-    {members.map((member) => {
-      const displayName =
-        member.user?.name ??
-        member.name ??
-        "Guest";
+                    return (
+                      <label
+                        key={member.id}
+                        className="flex items-center gap-3 text-white"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMembers.includes(member.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMembers([
+                                ...selectedMembers,
+                                member.id,
+                              ]);
+                            } else {
+                              setSelectedMembers(
+                                selectedMembers.filter(
+                                  (id) => id !== member.id
+                                )
+                              );
+                            }
+                          }}
+                        />
 
-      return (
-        <label
-          key={member.id}
-          className="flex items-center gap-3 text-white"
-        >
-          <input
-            type="checkbox"
-            checked={selectedMembers.includes(member.id)}
-            onChange={(e) => {
-              if (e.target.checked) {
-                setSelectedMembers([
-                  ...selectedMembers,
-                  member.id,
-                ]);
-              } else {
-                setSelectedMembers(
-                  selectedMembers.filter(
-                    (id) => id !== member.id
-                  )
-                );
-              }
-            }}
-          />
+                        <span>{displayName}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
-          <span>{displayName}</span>
-        </label>
-      );
-    })}
+              {splitType === "EXACT" && (
+                <div className="space-y-3">
+                  <label className="block text-sm text-slate-300">
+                    Exact Amounts
+                  </label>
 
-  </div>
-</div>
+                  {members
+                    .filter((m) =>
+                      selectedMembers.includes(m.id)
+                    )
+                    .map((member) => {
+                      const name =
+                        member.user?.name ??
+                        member.name ??
+                        "Guest";
 
-{splitType === "EXACT" && (
+                      return (
+                        <div
+                          key={member.id}
+                          className="flex items-center justify-between"
+                        >
+                          <span className="text-white">
+                            {name}
+                          </span>
+
+                          <input
+                            type="number"
+                            value={
+                              exactAmounts[member.id] ?? ""
+                            }
+                            onChange={(e) =>
+                              setExactAmounts({
+                                ...exactAmounts,
+                                [member.id]:
+                                  e.target.value,
+                              })
+                            }
+                            className="w-32 rounded-lg border border-slate-700 bg-slate-800 p-2 text-white"
+                          />
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+       
+              {splitType === "PERCENTAGE" && (
   <div className="space-y-3">
 
     <label className="block text-sm text-slate-300">
-      Exact Amounts
+      Percentages
     </label>
 
     {members
-      .filter((m) =>
-        selectedMembers.includes(m.id)
-      )
+      .filter((m) => selectedMembers.includes(m.id))
       .map((member) => {
 
         const name =
@@ -232,73 +275,29 @@ await createExpense(groupId, {
             key={member.id}
             className="flex items-center justify-between"
           >
-
             <span className="text-white">
               {name}
             </span>
 
             <input
               type="number"
-              value={
-                exactAmounts[member.id] ?? ""
-              }
+              min="0"
+              max="100"
+              placeholder="%"
+              value={percentageAmounts[member.id] ?? ""}
               onChange={(e) =>
-                setExactAmounts({
-                  ...exactAmounts,
-                  [member.id]:
-                    e.target.value,
+                setPercentageAmounts({
+                  ...percentageAmounts,
+                  [member.id]: Number(e.target.value),
                 })
               }
-              className="w-32 rounded-lg border border-slate-700 bg-slate-800 p-2 text-white"
+              className="w-28 rounded-xl border border-slate-700 bg-slate-800 p-2 text-white"
             />
-
           </div>
         );
 
       })}
-  </div>
-)}
 
-{splitType === "PERCENTAGE" && (
-  <div>
-    <label className="mb-2 block text-sm text-slate-300">
-      Percentages
-    </label>
-
-    <div className="space-y-3">
-      {members
-        .filter((m) => selectedMembers.includes(m.id))
-        .map((member) => {
-          const name =
-            member.user?.name ??
-            member.name ??
-            "Guest";
-
-          return (
-            <div
-              key={member.id}
-              className="flex items-center justify-between"
-            >
-              <span className="text-white">{name}</span>
-
-              <input
-                type="number"
-                min="0"
-                max="100"
-                placeholder="%"
-                value={percentageAmounts[member.id] ?? ""}
-                onChange={(e) =>
-                  setPercentageAmounts({
-                    ...percentageAmounts,
-                    [member.id]: Number(e.target.value),
-                  })
-                }
-                className="w-28 rounded-xl border border-slate-700 bg-slate-800 p-2 text-white"
-              />
-            </div>
-          );
-        })}
-    </div>
   </div>
 )}
 
