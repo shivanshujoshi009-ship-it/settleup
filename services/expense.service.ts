@@ -28,9 +28,12 @@ data: {
   notes?: string;
   splitType: string;
   paidById: string;
+
   members: string[];
+
   exactAmounts?: Record<string, number>;
   percentageAmounts?: Record<string, number>;
+  shareAmounts?: Record<string, number>;
 }
 ) {
   const response = await fetch(

@@ -55,10 +55,14 @@ export async function POST(
     const { groupId } = await params;
 
     const body = await request.json();
-
-    console.log("Incoming body:");
+    
+console.log("Incoming body:");
 console.dir(body, { depth: null });
 
+console.log("===== BODY RECEIVED =====");
+console.dir(body, { depth: null });
+
+console.log("shareAmounts:", body.shareAmounts);
 const {
   title,
   amount,
@@ -69,6 +73,7 @@ const {
   members,
   exactAmounts,
   percentageAmounts,
+  shareAmounts,
 } = body;
 
     if (!title || !amount || !paidById || !members) {
@@ -214,6 +219,42 @@ case "PERCENTAGE": {
       "Percentages must total 100."
     );
   }
+
+  break;
+}
+case "SHARES": {
+
+  let totalShares = 0;
+
+  selectedMembers.forEach((member) => {
+    totalShares += Number(
+      shareAmounts?.[member.id] ?? 0
+    );
+  });
+
+  if (totalShares <= 0) {
+    throw new Error(
+      "Total shares must be greater than zero."
+    );
+  }
+
+  splitAmounts = selectedMembers.map((member) => {
+
+    const shares = Number(
+      shareAmounts?.[member.id] ?? 0
+    );
+
+    return {
+      memberId: member.id,
+      amount: Number(
+        (
+          (Number(amount) * shares) /
+          totalShares
+        ).toFixed(2)
+      ),
+    };
+
+  });
 
   break;
 }

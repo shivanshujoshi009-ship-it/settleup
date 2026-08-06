@@ -44,6 +44,9 @@ const [percentageAmounts, setPercentageAmounts] = useState<
   Record<string, number>
 >({});
 
+const [shareAmounts, setShareAmounts] = useState<
+  Record<string, number>
+>({});
  useEffect(() => {
   if (!open) return;
 
@@ -84,18 +87,27 @@ async function handleCreate() {
       const exactAmountsNum: Record<string, number> = Object.fromEntries(
         Object.entries(exactAmounts).map(([key, value]) => [key, Number(value)])
       );
-   await createExpense(groupId, {
-  title,
-  amount: Number(amount),
-  category,
-  notes,
-  splitType,
-  paidById: dbUser.id,
-  members: selectedMembers,
-  exactAmounts: exactAmountsNum,
-  percentageAmounts,
-});
+      await createExpense(groupId, {
+        title,
+        amount: Number(amount),
+        category,
+        notes,
+        splitType,
+        paidById: dbUser.id,
+        members: selectedMembers,
+        exactAmounts: exactAmountsNum,
+        percentageAmounts,
+        shareAmounts,
+      });
 
+      console.log("===== REQUEST DATA =====");
+console.log({
+  title,
+  amount,
+  splitType,
+  members: selectedMembers,
+  shareAmounts,
+});
       setTitle("");
       setAmount("");
       setCategory("General");
@@ -153,16 +165,16 @@ async function handleCreate() {
                 <label className="mb-2 block text-sm text-slate-300">
                   Split Type
                 </label>
-
-                <select
-                  value={splitType}
-                  onChange={(e) => setSplitType(e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white"
-                >
-                  <option value="EQUAL">Equal</option>
-                  <option value="EXACT">Exact Amount</option>
-                  <option value="PERCENTAGE">Percentage</option>
-                </select>
+<select
+  value={splitType}
+  onChange={(e) => setSplitType(e.target.value)}
+  className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white"
+>
+  <option value="EQUAL">Equal</option>
+  <option value="EXACT">Exact Amount</option>
+  <option value="PERCENTAGE">Percentage</option>
+  <option value="SHARES">Shares</option>
+</select>
               </div>
 
               <div>
@@ -301,6 +313,51 @@ async function handleCreate() {
   </div>
 )}
 
+{splitType === "SHARES" && (
+  <div className="space-y-3">
+
+    <label className="block text-sm text-slate-300">
+      Shares
+    </label>
+
+    {members
+      .filter((m) => selectedMembers.includes(m.id))
+      .map((member) => {
+
+        const name =
+          member.user?.name ??
+          member.name ??
+          "Guest";
+
+        return (
+          <div
+            key={member.id}
+            className="flex items-center justify-between"
+          >
+            <span className="text-white">
+              {name}
+            </span>
+
+            <input
+              type="number"
+              min="1"
+              placeholder="Shares"
+              value={shareAmounts[member.id] ?? ""}
+              onChange={(e) =>
+                setShareAmounts({
+                  ...shareAmounts,
+                  [member.id]: Number(e.target.value),
+                })
+              }
+              className="w-28 rounded-xl border border-slate-700 bg-slate-800 p-2 text-white"
+            />
+          </div>
+        );
+
+      })}
+
+  </div>
+)}
               <textarea
                 placeholder="Notes"
                 value={notes}
