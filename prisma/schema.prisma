@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  firebaseId    String    @unique
+  name          String
+  email         String    @unique
+  photoUrl      String?
+  createdAt     DateTime  @default(now())
+  expensesPaid  Expense[]
+  groupsCreated Group[]   @relation("GroupCreator")
+  memberships   Member[]
+}
+
+model Group {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  createdById String
+  expenses    Expense[]
+  createdBy   User      @relation("GroupCreator", fields: [createdById], references: [id])
+  members     Member[]
+}
+
+model Member {
+  id       String         @id @default(cuid())
+  joinedAt DateTime       @default(now())
+  userId   String?
+  groupId  String
+  email    String?
+  name     String
+  splits   ExpenseSplit[]
+  group    Group          @relation(fields: [groupId], references: [id])
+  user     User?          @relation(fields: [userId], references: [id])
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  title     String
+  amount    Float
+  category  String?
+  notes     String?
+
+  splitType String   @default("EQUAL")
+
+  groupId   String
+  paidById  String
+  createdAt DateTime @default(now())
+
+  group   Group @relation(fields: [groupId], references: [id])
+  paidBy  User  @relation(fields: [paidById], references: [id])
+  splits  ExpenseSplit[]
+}
+model ExpenseSplit {
+  id        String  @id @default(cuid())
+  amount    Float
+  expenseId String
+  memberId  String
+  expense   Expense @relation(fields: [expenseId], references: [id])
+  member    Member  @relation(fields: [memberId], references: [id])
+}
