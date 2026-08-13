@@ -1,36 +1,21 @@
 import ExpenseCard from "./ExpenseCard";
-
-type Expense = {
-  id: string;
-  title: string;
-  amount: number;
-
-  paidBy: {
-    name: string;
-  };
-
-  splits: {
-    id: string;
-    amount: number;
-
-    member: {
-      user: {
-        name: string;
-      };
-    };
-  }[];
-};
+import type { Expense } from "@/types/expense";
 
 type Props = {
   expenses: Expense[];
+  groupId: string;
+  onExpenseUpdated: () => void;
+  selectedExpenseId: string | null;
 };
 
 export default function ExpensesList({
   expenses,
+  groupId,
+  onExpenseUpdated,
+  selectedExpenseId,
 }: Props) {
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
-
+    <div>
       <h2 className="mb-6 text-2xl font-bold text-white">
         Expenses ({expenses.length})
       </h2>
@@ -44,15 +29,16 @@ export default function ExpensesList({
           {expenses.map((expense) => (
             <ExpenseCard
               key={expense.id}
-              title={expense.title}
-              amount={expense.amount}
-              paidBy={expense.paidBy.name}
-              splits={expense.splits}
+              expense={expense}
+              groupId={groupId}
+              onExpenseUpdated={onExpenseUpdated}
+              selected={
+                expense.id === selectedExpenseId
+              }
             />
           ))}
         </div>
       )}
-
     </div>
   );
 }

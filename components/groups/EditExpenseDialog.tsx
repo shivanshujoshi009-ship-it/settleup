@@ -2,37 +2,47 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { createExpense } from "@/services/expense.service";
+import { updateExpense } from "@/services/expense.service";
+
+import type { Expense } from "@/types/expense";
+import type { Member } from "@/types/member";
 import { useAuth } from "@/context/AuthProvider";
+
 import { apiFetch } from "@/services/api-client";
 
 type Props = {
+  expense: Expense;
   groupId: string;
-  onExpenseAdded?: () => void;
-};
-type Member = {
-  id: string;
-  name?: string;
-
-  user?: {
-    id: string;
-    name: string;
-  } | null;
+  onExpenseUpdated?: () => void;
 };
 
-export default function AddExpenseDialog({
+
+export default function EditExpenseDialog({
+  expense,
   groupId,
-  onExpenseAdded,
-}: Props) {
+  onExpenseUpdated,
+}: Props)  {
   const { dbUser } = useAuth();
- 
+  
 
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("General");
- const [splitType, setSplitType] = useState("EQUAL");
-  const [notes, setNotes] = useState("");
+  const [title, setTitle] = useState(expense.title);
+
+const [amount, setAmount] = useState(
+  expense.amount.toString()
+);
+
+const [category, setCategory] = useState(
+  expense.category || "General"
+);
+
+const [splitType, setSplitType] = useState(
+  expense.splitType
+);
+
+const [notes, setNotes] = useState(
+  expense.notes || ""
+);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
 const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
@@ -48,77 +58,137 @@ const [percentageAmounts, setPercentageAmounts] = useState<
 const [shareAmounts, setShareAmounts] = useState<
   Record<string, number>
 >({});
- useEffect(() => {
-  if (!open) return;
 
+
+useEffect(() => {
   async function loadMembers() {
-    const response = await apiFetch(`/api/groups/${groupId}`);
-
-    const group = await response.json();
-
-    setMembers(group.members);
-
-    setSelectedMembers(
-      group.members.map((m: Member) => m.id)
-    );
-
-    const values: Record<string, string> = {};
-    group.members.forEach((member: Member) => {
-      values[member.id] = "";
-    });
-    setExactAmounts(values);
-  }
-  loadMembers();
-}, [open, groupId]);
-
-
-async function handleCreate() {
-    if (!dbUser) {
-      alert("Please login again.");
-      return;
-    }
-
-    if (!title.trim() || !amount.trim()) {
-      alert("Please fill all required fields.");
-      return;
-    }
-
     try {
-      setLoading(true);
-      const exactAmountsNum: Record<string, number> = Object.fromEntries(
-        Object.entries(exactAmounts).map(([key, value]) => [key, Number(value)])
+  const response = await apiFetch(
+  `/api/groups/${groupId}/members`
+);
+
+if (!response.ok) {
+  const text = await response.text();
+
+  console.error(
+    "LOAD MEMBERS STATUS:",
+    response.status
+  );
+
+  console.error(
+    "LOAD MEMBERS RESPONSE:",
+    text
+  );
+
+  throw new Error(
+    `Failed to load members (${response.status})`
+  );
+}
+
+const text = await response.text();
+
+
+
+const data: Member[] = text
+  ? JSON.parse(text)
+  : [];
+
+      setMembers(data);
+
+      // Members participating in this expense
+      const selected = expense.splits.map(
+        (split) => split.member.id
       );
-      await createExpense(groupId, {
-        title,
-        amount: Number(amount),
-        category,
-        notes,
-        splitType,
-        paidById: dbUser.id,
-        members: selectedMembers,
-        exactAmounts: exactAmountsNum,
-        percentageAmounts,
-        shareAmounts,
+
+      setSelectedMembers(selected);
+
+
+      // Populate Exact Amounts
+      const exact: Record<string, string> = {};
+
+      expense.splits.forEach((split) => {
+        exact[split.member.id] =
+          split.amount.toString();
       });
 
-    
-      setTitle("");
-      setAmount("");
-      setCategory("General");
-      setSplitType("EQUAL");
-      setNotes("");
+      setExactAmounts(exact);
 
-      setOpen(false);
+      // Populate Percentages
+      const percentage: Record<string, number> = {};
 
-      onExpenseAdded?.();
+      expense.splits.forEach((split) => {
+        percentage[split.member.id] = Number(
+          (
+            (split.amount / expense.amount) *
+            100
+          ).toFixed(2)
+        );
+      });
 
-      alert("Expense added successfully.");
-    } catch (error: any) {
-      alert(error.message);
-    } finally {
-      setLoading(false);
+      setPercentageAmounts(percentage);
+
+      // Populate Shares
+      const shares: Record<string, number> = {};
+
+      expense.splits.forEach((split) => {
+        shares[split.member.id] = 1;
+      });
+
+      setShareAmounts(shares);
+
+    } catch (error) {
+      console.error(error);
     }
   }
+
+  loadMembers();
+}, [groupId, expense]);
+
+async function handleUpdate() {
+  if (!dbUser) {
+    alert("Please login again.");
+    return;
+  }
+
+  if (!title.trim() || !amount.trim()) {
+    alert("Please fill all required fields.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    await updateExpense(expense.id, {
+      title,
+      amount: Number(amount),
+      category,
+      notes,
+      splitType,
+      paidById: dbUser.id,
+      members: selectedMembers,
+      exactAmounts: Object.fromEntries(
+        Object.entries(exactAmounts).map(([k, v]) => [
+          k,
+          Number(v),
+        ])
+      ),
+      percentageAmounts,
+      shareAmounts,
+    });
+
+    setOpen(false);
+
+    onExpenseUpdated?.();
+
+    alert("Expense updated successfully.");
+
+  } catch (error: any) {
+    alert(error.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   return (
     <>
@@ -130,8 +200,8 @@ async function handleCreate() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6">
             <h2 className="mb-6 text-2xl font-bold text-white">
-              Add Expense
-            </h2>
+  Edit Expense
+</h2>
 
             <div className="space-y-4">
               <input
@@ -368,11 +438,11 @@ async function handleCreate() {
                 </Button>
 
                 <Button
-                  onClick={handleCreate}
-                  disabled={loading}
-                >
-                  {loading ? "Saving..." : "Save Expense"}
-                </Button>
+  onClick={handleUpdate}
+  disabled={loading}
+>
+  {loading ? "Updating..." : "Save Changes"}
+</Button>
               </div>
             </div>
           </div>

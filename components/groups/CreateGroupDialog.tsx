@@ -7,10 +7,11 @@ import { useAuth } from "@/context/AuthProvider";
 
 type Props = {
   onGroupCreated?: () => void;
+  trigger?: React.ReactNode;
 };
-
 export default function CreateGroupDialog({
   onGroupCreated,
+  trigger,
 }: Props) {
   const {
     dbUser,
@@ -22,8 +23,7 @@ export default function CreateGroupDialog({
   const [creating, setCreating] = useState(false);
 
   async function handleCreate() {
-    console.log("========== CREATE GROUP ==========");
-
+   
     if (authLoading) {
       alert("Please wait...");
       return;
@@ -34,9 +34,7 @@ export default function CreateGroupDialog({
       return;
     }
 
-    console.log("Group Name:", groupName);
-    console.log("dbUser:", dbUser);
-console.log("createdById:", dbUser?.id);
+  
 
     if (!dbUser) {
       alert("Please login again.");
@@ -52,7 +50,7 @@ console.log("createdById:", dbUser?.id);
         createdById: dbUser.id,
       });
 
-      console.log("Group created:", group);
+    
 
       alert("Group created successfully!");
 
@@ -71,9 +69,15 @@ console.log("createdById:", dbUser?.id);
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        + New Group
-      </Button>
+      {trigger ? (
+  <div onClick={() => setOpen(true)}>
+    {trigger}
+  </div>
+) : (
+  <Button onClick={() => setOpen(true)}>
+    + New Group
+  </Button>
+)}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

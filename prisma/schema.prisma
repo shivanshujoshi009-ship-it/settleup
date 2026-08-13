@@ -28,6 +28,7 @@ model Group {
   expenses    Expense[]
   createdBy   User      @relation("GroupCreator", fields: [createdById], references: [id])
   members     Member[]
+  settlements Settlement[]
 }
 
 model Member {
@@ -40,25 +41,25 @@ model Member {
   splits   ExpenseSplit[]
   group    Group          @relation(fields: [groupId], references: [id])
   user     User?          @relation(fields: [userId], references: [id])
+  settlementsPaid     Settlement[] @relation("SettlementPayer")
+  settlementsReceived Settlement[] @relation("SettlementReceiver")
 }
 
 model Expense {
-  id        String   @id @default(cuid())
+  id        String         @id @default(cuid())
   title     String
   amount    Float
   category  String?
   notes     String?
-
-  splitType String   @default("EQUAL")
-
+  createdAt DateTime       @default(now())
   groupId   String
   paidById  String
-  createdAt DateTime @default(now())
-
-  group   Group @relation(fields: [groupId], references: [id])
-  paidBy  User  @relation(fields: [paidById], references: [id])
-  splits  ExpenseSplit[]
+  splitType String         @default("EQUAL")
+  group     Group          @relation(fields: [groupId], references: [id])
+  paidBy    User           @relation(fields: [paidById], references: [id])
+  splits    ExpenseSplit[]
 }
+
 model ExpenseSplit {
   id        String  @id @default(cuid())
   amount    Float
@@ -67,3 +68,18 @@ model ExpenseSplit {
   expense   Expense @relation(fields: [expenseId], references: [id])
   member    Member  @relation(fields: [memberId], references: [id])
 }
+
+model Settlement {
+  id         String   @id @default(cuid())
+  amount     Float
+  createdAt  DateTime @default(now())
+
+  groupId    String
+  payerId    String
+  receiverId String
+
+  group    Group  @relation(fields: [groupId], references: [id])
+  payer    Member @relation("SettlementPayer", fields: [payerId], references: [id])
+  receiver Member @relation("SettlementReceiver", fields: [receiverId], references: [id])
+}
+

@@ -6,10 +6,11 @@ import {
   useEffect,
   useState,
 } from "react";
-
+ 
 import {
   User,
   onAuthStateChanged,
+  signOut,
 } from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
@@ -21,12 +22,12 @@ export interface DbUser {
   email: string;
   photoUrl?: string;
 }
-
 type AuthContextType = {
   user: User | null;
   dbUser: DbUser | null;
   loading: boolean;
   setDbUser: (user: DbUser | null) => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   dbUser: null,
   loading: true,
   setDbUser: () => {},
+  logout: async () => {},
 });
 
 export function AuthProvider({
@@ -44,6 +46,18 @@ export function AuthProvider({
   const [user, setUser] = useState<User | null>(null);
   const [dbUser, setDbUser] = useState<DbUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+async function logout() {
+  try {
+    await signOut(auth);
+
+    setUser(null);
+    setDbUser(null);
+  } catch (error) {
+    console.error("Logout failed:", error);
+    throw error;
+  }
+}
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
@@ -97,6 +111,7 @@ export function AuthProvider({
         dbUser,
         loading,
         setDbUser,
+        logout,
       }}
     >
       {children}

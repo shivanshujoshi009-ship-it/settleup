@@ -1,5 +1,6 @@
 export interface Balance {
-  userId: string;
+  memberId: string;
+  userId?: string;
   name: string;
   balance: number;
 }
@@ -19,7 +20,9 @@ export interface Split {
 }
 
 export interface Expense {
+  id: string;
   amount: number;
+  createdAt: string;
 
   paidBy: {
     id: string;
@@ -30,97 +33,151 @@ export interface Expense {
 }
 
 /**
- * Calculates the net balance of every user.
+ * Calculates the net balance of every group member.
  *
- * Positive balance  -> user should receive money
- * Negative balance  -> user owes money
+ * Positive balance -> member should receive money
+ * Negative balance -> member owes money
  */
 export function calculateBalances(
   expenses: Expense[]
 ): Balance[] {
-
   const balances = new Map<string, Balance>();
 
   for (const expense of expenses) {
+    /*
+     * The payer is stored as User.id in Expense.
+     *
+     * Find that user's Member.id from the expense splits.
+     * This keeps the settlement system consistently member-based.
+     */
+    const payerSplit = expense.splits.find(
+      (split) =>
+        split.member.user?.id === expense.paidBy.id
+    );
 
-    // Add money to payer
-    if (!balances.has(expense.paidBy.id)) {
-      balances.set(expense.paidBy.id, {
-        userId: expense.paidBy.id,
-        name: expense.paidBy.name,
-        balance: 0,
-      });
+    if (payerSplit) {
+      const payerMember = payerSplit.member;
+
+      if (!balances.has(payerMember.id)) {
+        balances.set(payerMember.id, {
+          memberId: payerMember.id,
+          userId: payerMember.user?.id,
+          name:
+            payerMember.user?.name ??
+            payerMember.name ??
+            "Guest",
+          balance: 0,
+        });
+      }
+
+      balances.get(payerMember.id)!.balance +=
+        expense.amount;
     }
 
-    balances.get(expense.paidBy.id)!.balance += expense.amount;
-
-    // Subtract each member's share
+    /*
+     * Subtract every member's share.
+     */
     for (const split of expense.splits) {
-
       const member = split.member;
 
-      // Registered member
-      if (member.user) {
-
-        const user = member.user;
-
-        if (!balances.has(user.id)) {
-          balances.set(user.id, {
-            userId: user.id,
-            name: user.name,
-            balance: 0,
-          });
-        }
-
-        balances.get(user.id)!.balance -= split.amount;
+      if (!balances.has(member.id)) {
+        balances.set(member.id, {
+          memberId: member.id,
+          userId: member.user?.id,
+          name:
+            member.user?.name ??
+            member.name ??
+            "Guest",
+          balance: 0,
+        });
       }
 
-      // Guest member
-      else {
-
-        const guestId = member.id;
-
-        if (!balances.has(guestId)) {
-          balances.set(guestId, {
-            userId: guestId,
-            name: member.name ?? "Guest",
-            balance: 0,
-          });
-        }
-
-        balances.get(guestId)!.balance -= split.amount;
-      }
+      balances.get(member.id)!.balance -=
+        split.amount;
     }
   }
 
   return Array.from(balances.values());
 }
 
-export interface Settlement {
-  from: string;
-  to: string;
+export interface RecordedSettlement {
+  payerId: string;
+  receiverId: string;
   amount: number;
 }
 
+/**
+ * Applies already-recorded settlements to balances.
+ *
+ * Payer paid money they owed:
+ * negative balance moves toward zero.
+ *
+ * Receiver received money:
+ * positive balance moves toward zero.
+ */
+export function applySettlements(
+  balances: Balance[],
+  settlements: RecordedSettlement[]
+): Balance[] {
+  const updated = balances.map((balance) => ({
+    ...balance,
+  }));
+
+  for (const settlement of settlements) {
+    const payer = updated.find(
+      (balance) =>
+        balance.memberId === settlement.payerId
+    );
+
+    const receiver = updated.find(
+      (balance) =>
+        balance.memberId === settlement.receiverId
+    );
+
+    if (payer) {
+      payer.balance += settlement.amount;
+    }
+
+    if (receiver) {
+      receiver.balance -= settlement.amount;
+    }
+  }
+
+  return updated;
+}
+
+export interface SettlementSuggestion {
+  fromMemberId: string;
+  from: string;
+
+  toMemberId: string;
+  to: string;
+
+  amount: number;
+}
+
+/**
+ * Converts balances into the minimum practical
+ * set of payments needed to settle the group.
+ */
 export function calculateSettlements(
   balances: Balance[]
-): Settlement[] {
-
+): SettlementSuggestion[] {
   const debtors = balances
-    .filter((b) => b.balance < 0)
-    .map((b) => ({
-      ...b,
-      balance: Math.abs(b.balance),
+    .filter((balance) => balance.balance < -0.01)
+    .map((balance) => ({
+      ...balance,
+      balance: Math.abs(balance.balance),
     }));
 
   const creditors = balances
-    .filter((b) => b.balance > 0)
-    .map((b) => ({
-      ...b,
-      balance: b.balance,
+    .filter((balance) => balance.balance > 0.01)
+    .map((balance) => ({
+      ...balance,
+      balance: balance.balance,
     }));
 
-  const settlements: Settlement[] = [];
+  const settlements: SettlementSuggestion[] = [];
 
   let debtorIndex = 0;
   let creditorIndex = 0;
@@ -129,7 +186,6 @@ export function calculateSettlements(
     debtorIndex < debtors.length &&
     creditorIndex < creditors.length
   ) {
-
     const debtor = debtors[debtorIndex];
     const creditor = creditors[creditorIndex];
 
@@ -139,8 +195,12 @@ export function calculateSettlements(
     );
 
     settlements.push({
+      fromMemberId: debtor.memberId,
       from: debtor.name,
+
+      toMemberId: creditor.memberId,
       to: creditor.name,
+
       amount: Number(amount.toFixed(2)),
     });
 

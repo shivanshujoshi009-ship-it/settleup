@@ -1,17 +1,29 @@
-export interface Expense {
+import type { Member } from "./member";
+
+export interface Split {
   id: string;
-  groupId: string;
-  title: string;
   amount: number;
-  paidBy: string;
-  splitBetween: string[];
-  createdAt?: unknown;
+
+  member: Member;
 }
 
-export interface ExpenseInput {
-  groupId: string;
+export interface Expense {
+  id: string;
+
   title: string;
   amount: number;
-  paidBy: string;
-  splitBetween: string[];
+
+  category?: string;
+  notes?: string;
+
+  splitType: string;
+
+  createdAt: string;
+
+  paidBy: {
+    id: string;
+    name: string;
+  };
+
+  splits: Split[];
 }

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-client";
 export async function addMember(
   groupId: string,
   data: {
@@ -5,17 +6,16 @@ export async function addMember(
     email?: string;
   }
 ) {
-  const response = await fetch(
-    `/api/groups/${groupId}/members`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    }
-  );
-
+  const response = await apiFetch(
+  `/api/groups/${groupId}/members`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  }
+);
   const result = await response.json();
 
   if (!response.ok) {

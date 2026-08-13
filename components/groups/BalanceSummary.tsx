@@ -1,8 +1,4 @@
-type Balance = {
-  userId: string;
-  name: string;
-  balance: number;
-};
+import type { Balance } from "@/algorithms/settlement";
 
 type Props = {
   balances: Balance[];
@@ -25,7 +21,7 @@ export default function BalanceSummary({
         <div className="space-y-3">
           {balances.map((balance) => (
             <div
-              key={balance.userId}
+              key={balance.memberId}
               className="flex items-center justify-between rounded-lg bg-slate-800 p-3"
             >
               <span className="text-white">

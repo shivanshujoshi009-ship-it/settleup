@@ -1,71 +1,27 @@
-export interface Split {
-  id: string;
-  amount: number;
 
-  member: {
-    id: string;
-
-    user: {
-      id: string;
-      name: string;
-      email: string;
-    };
-  };
-}
-
-export interface Expense {
-  id: string;
-  title: string;
-  amount: number;
-  category?: string;
-  notes?: string;
-  createdAt: string;
-
-  paidBy: {
-    id: string;
-    name: string;
-  };
-
-  splits: Split[];
-}
-
-export interface Member {
-  id: string;
-
-  user?: {
-    id: string;
-    name: string;
-    email: string;
-  };
-
-  name?: string;
-  email?: string;
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: string;
-  createdById: string;
-
-  createdBy?: {
-    id: string;
-    name: string;
-    email: string;
-    photoUrl?: string;
-  };
-
-  members: Member[];
-  expenses: Expense[];
-}
+import type { Group } from "@/types/group";
+import { apiFetch } from "@/services/api-client";
 
 // GET ALL GROUPS
 export async function getGroups(): Promise<Group[]> {
-  const response = await fetch("/api/groups");
+  const response = await apiFetch("/api/groups");
 
   if (!response.ok) {
-    throw new Error("Failed to fetch groups");
+    const text = await response.text();
+
+    console.error(
+      "GET GROUPS STATUS:",
+      response.status
+    );
+
+    console.error(
+      "GET GROUPS RESPONSE:",
+      text
+    );
+
+    throw new Error(
+      `Failed to fetch groups (${response.status})`
+    );
   }
 
   return response.json();
@@ -77,7 +33,7 @@ export async function createGroup(data: {
   description?: string;
   createdById: string;
 }) {
-  const response = await fetch("/api/groups", {
+  const response = await apiFetch("/api/groups", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -94,12 +50,20 @@ export async function createGroup(data: {
 
 // DELETE GROUP
 export async function deleteGroup(id: string) {
-  const response = await fetch(`/api/groups/${id}`, {
-    method: "DELETE",
-  });
+  const response = await apiFetch(
+    `/api/groups/${id}`,
+    {
+      method: "DELETE",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error("Failed to delete group");
+    const result = await response.json();
+
+    throw new Error(
+      result.message ||
+        "Failed to delete group"
+    );
   }
 
   return response.json();
@@ -109,8 +73,9 @@ export async function deleteGroup(id: string) {
 export async function getGroupById(
   id: string
 ): Promise<Group> {
-  const response = await fetch(`/api/groups/${id}`);
-
+  const response = await apiFetch(
+  `/api/groups/${id}`
+);
   if (!response.ok) {
     const text = await response.text();
     console.error("Status:", response.status);

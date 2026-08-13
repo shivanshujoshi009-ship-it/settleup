@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import {
+  useParams,
+  useSearchParams,
+} from "next/navigation";
 
 import GroupHeader from "@/components/groups/GroupHeader";
 import MembersList from "@/components/groups/MembersList";
@@ -10,31 +13,53 @@ import AddMemberDialog from "@/components/groups/AddMemberDialog";
 import AddExpenseDialog from "@/components/groups/AddExpenseDialog";
 import SettlementSummary from "@/components/groups/SettlementSummary";
 import BalanceSummary from "@/components/groups/BalanceSummary";
+import SettlementHistory from "@/components/groups/SettlementHistory";
+import { getGroupById } from "@/services/group.service";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 import {
-  Group,
-  getGroupById,
-} from "@/services/group.service";
+  calculateBalances,
+  applySettlements,
+  calculateSettlements,
+  type RecordedSettlement,
+} from "@/algorithms/settlement";
 
-import { calculateBalances } from "@/algorithms/settlement";
+import {
+  getSettlements,
+  type Settlement,
+} from "@/services/settlement.service";
 
 export default function GroupPage() {
   const params = useParams();
   const groupId = params.groupId as string;
+  const searchParams = useSearchParams();
 
-  const [group, setGroup] = useState<Group | null>(null);
+const selectedExpenseId =
+  searchParams.get("expense");
+
+const selectedSettlementId =
+  searchParams.get("settlement");
+
+  const [group, setGroup] = useState<any | null>(null);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadGroup() {
-    try {
-      const data = await getGroupById(groupId);
-      setGroup(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  try {
+    const [groupData, settlementData] =
+      await Promise.all([
+        getGroupById(groupId),
+        getSettlements(groupId),
+      ]);
+
+    setGroup(groupData);
+    setSettlements(settlementData);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     if (groupId) {
@@ -57,8 +82,24 @@ export default function GroupPage() {
       </main>
     );
   }
-  const balances = calculateBalances(group.expenses);
-  const settlements: any[] = [];
+ const balances = calculateBalances(
+  group.expenses ?? []
+);
+
+const recordedSettlements: RecordedSettlement[] =
+  settlements.map((settlement) => ({
+    payerId: settlement.payer.id,
+    receiverId: settlement.receiver.id,
+    amount: settlement.amount,
+  }));
+
+const adjustedBalances = applySettlements(
+  balances,
+  recordedSettlements
+);
+
+const settlementSuggestions =
+  calculateSettlements(adjustedBalances);
   return (
   <main className="min-h-screen bg-[#030712] p-10">
 
@@ -79,22 +120,25 @@ export default function GroupPage() {
     </div>
 
     {/* Members & Expenses */}
-    <div className="grid gap-8 lg:grid-cols-2">
+<div className="grid gap-8 lg:grid-cols-2">
 
-      <MembersList
-  members={
-    group.members?.map(
-      (member: any) =>
-        member.user?.name ?? member.name
-    ) ?? []
-  }
+  <MembersList
+    members={
+      group.members?.map(
+        (member: any) =>
+          member.user?.name ?? member.name
+      ) ?? []
+    }
+  />
+
+  <ExpensesList
+  expenses={(group.expenses ?? []) as any}
+  groupId={group.id}
+  onExpenseUpdated={loadGroup}
+  selectedExpenseId={selectedExpenseId}
 />
 
-      <ExpensesList
-        expenses={group.expenses ?? []}
-      />
-
-    </div>
+</div>
 
     {/* Balances & Settlements */}
     <div className="mt-8 grid gap-8 lg:grid-cols-2">
@@ -103,11 +147,21 @@ export default function GroupPage() {
         balances={balances}
       />
 
-      <SettlementSummary
-        settlements={settlements}
-      />
+<SettlementSummary
+  settlements={settlementSuggestions}
+  groupId={group.id}
+  onSettlementCreated={loadGroup}
+/>
 
     </div>
+
+{/* Settlement History */}
+<div className="mt-8">
+  <SettlementHistory
+  settlements={settlements}
+  selectedSettlementId={selectedSettlementId}
+/>
+</div>
 
   </main>
 );

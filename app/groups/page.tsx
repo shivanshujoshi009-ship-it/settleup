@@ -5,10 +5,8 @@ import { useEffect, useState } from "react";
 import CreateGroupDialog from "@/components/groups/CreateGroupDialog";
 import GroupsList from "@/components/groups/GroupsList";
 
-import {
-  Group,
-  getGroups,
-} from "@/services/group.service";
+import { getGroups } from "@/services/group.service";
+import type { Group } from "@/types/group";
 
 export default function GroupsPage() {
   const [groups, setGroups] = useState<Group[]>([]);

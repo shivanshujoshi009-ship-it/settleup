@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Group } from "@/services/group.service";
-
+import type { Group } from "@/types/group";
 type Props = {
   groups: Group[];
 };
@@ -31,7 +30,7 @@ export default function GroupsList({ groups }: Props) {
           </h2>
 
           <p className="mt-2 text-sm text-slate-400">
-            {group.description || "No description"}
+            {group.id}
           </p>
         </Link>
       ))}

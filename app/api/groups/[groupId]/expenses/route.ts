@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import { prisma } from "@/lib/prisma";
+import { calculateSplits } from "@/lib/expense/splitCalculator";
+import { getAuthenticatedUser } from "@/lib/api-auth";
 
 type Params = Promise<{
   groupId: string;
@@ -13,39 +16,84 @@ export async function GET(
   try {
     const { groupId } = await params;
 
-    const expenses = await prisma.expense.findMany({
+    const firebaseUser =
+      await getAuthenticatedUser(request);
+
+    const dbUser = await prisma.user.findUnique({
       where: {
-        groupId,
+        firebaseId: firebaseUser.uid,
       },
-      include: {
-        paidBy: true,
-        splits: {
-          include: {
-            member: {
-              include: {
-                user: true,
+    });
+
+    if (!dbUser) {
+      return NextResponse.json(
+        { message: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const membership =
+      await prisma.member.findFirst({
+        where: {
+          groupId,
+          userId: dbUser.id,
+        },
+      });
+
+    if (!membership) {
+      return NextResponse.json(
+        { message: "You are not a member of this group" },
+        { status: 403 }
+      );
+    }
+
+    const expenses =
+      await prisma.expense.findMany({
+        where: {
+          groupId,
+        },
+        include: {
+          paidBy: true,
+          splits: {
+            include: {
+              member: {
+                include: {
+                  user: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
     return NextResponse.json(expenses);
-  } catch (error) {
-    console.error("GET EXPENSES ERROR:", error);
+  } catch (error: any) {
+    console.error(
+      "GET EXPENSES ERROR:",
+      error
+    );
+
+    if (error.message === "Unauthorized") {
+      return NextResponse.json(
+        { message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
     return NextResponse.json(
-      { message: "Failed to fetch expenses" },
-      { status: 500 }
+      {
+        message: "Failed to fetch expenses",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
 
-// POST /api/groups/:groupId/expenses
 // POST /api/groups/:groupId/expenses
 export async function POST(
   request: NextRequest,
@@ -54,29 +102,60 @@ export async function POST(
   try {
     const { groupId } = await params;
 
+    const firebaseUser =
+      await getAuthenticatedUser(request);
+
+    const dbUser = await prisma.user.findUnique({
+      where: {
+        firebaseId: firebaseUser.uid,
+      },
+    });
+
+    if (!dbUser) {
+      return NextResponse.json(
+        { message: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    // Verify that the authenticated user belongs to the group.
+    const currentMember =
+      await prisma.member.findFirst({
+        where: {
+          groupId,
+          userId: dbUser.id,
+        },
+      });
+
+    if (!currentMember) {
+      return NextResponse.json(
+        { message: "You are not a member of this group" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
-    
-console.log("Incoming body:");
-console.dir(body, { depth: null });
 
-console.log("===== BODY RECEIVED =====");
-console.dir(body, { depth: null });
+    const {
+      title,
+      amount,
+      category,
+      notes,
+      splitType,
+      paidById,
+      members,
+      exactAmounts,
+      percentageAmounts,
+      shareAmounts,
+    } = body;
 
-console.log("shareAmounts:", body.shareAmounts);
-const {
-  title,
-  amount,
-  category,
-  notes,
-  splitType,
-  paidById,
-  members,
-  exactAmounts,
-  percentageAmounts,
-  shareAmounts,
-} = body;
-
-    if (!title || !amount || !paidById || !members) {
+    if (
+      !title?.trim() ||
+      amount === undefined ||
+      !paidById ||
+      !Array.isArray(members) ||
+      members.length === 0
+    ) {
       return NextResponse.json(
         {
           message: "Missing required fields",
@@ -87,211 +166,120 @@ const {
       );
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-
-      // Get all members of this group
-     const selectedMembers = await tx.member.findMany({
-  where: {
-    id: {
-      in: members,
-    },
-  },
-}); 
-
-    if (selectedMembers.length === 0) {
-        throw new Error("Group has no members.");
-      }
-
-      // Create Expense
-  let expense;
-  try {
-  console.log("Creating expense with:");
-  console.log({
-    title,
-    amount,
-    category,
-    notes,
-    splitType,
-    groupId,
-    paidById,
-  });
-
-  expense = await tx.expense.create({
-    data: {
-      title,
-      amount: Number(amount),
-      category: category || "General",
-      notes: notes || "",
-      splitType: splitType || "EQUAL",
-      groupId,
-      paidById,
-    },
-  });
-
-  console.log("Expense created:", expense);
-
-} catch (e) {
-  console.error("========== EXPENSE CREATE ERROR ==========");
-console.dir(e, { depth: null });
-console.error("==========================================");
-throw e;
-}
-      // Equal share for every member
-   let splitAmounts: {
-  memberId: string;
-  amount: number;
-}[] = [];
-
-switch (splitType) {
-
-  case "EQUAL": {
-
-    const equalShare =
-      Number(amount) /
-      selectedMembers.length;
-
-    splitAmounts =
-      selectedMembers.map((member) => ({
-        memberId: member.id,
-        amount: Number(equalShare.toFixed(2)),
-      }));
-
-    break;
-  }
-
-  case "EXACT": {
-
-    let total = 0;
-
-    splitAmounts =
-      selectedMembers.map((member) => {
-
-        const value =
-          Number(
-            exactAmounts?.[member.id] ?? 0
-          );
-
-        total += value;
-
-        return {
-          memberId: member.id,
-          amount: value,
-        };
-
-      });
+    const numericAmount = Number(amount);
 
     if (
-      Math.abs(
-        total - Number(amount)
-      ) > 0.01
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
     ) {
-      throw new Error(
-        "Exact amounts must equal total expense."
+      return NextResponse.json(
+        {
+          message: "Amount must be greater than zero",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    break;
-  } 
+    const result =
+      await prisma.$transaction(async (tx) => {
+        // Verify payer belongs to this group.
+        const payer =
+          await tx.member.findFirst({
+            where: {
+              id: paidById,
+              groupId,
+            },
+          });
 
-case "PERCENTAGE": {
+        if (!payer) {
+          throw new Error(
+            "Invalid payer for this group."
+          );
+        }
 
-  let total = 0;
+        // Verify every selected member belongs
+        // to this group.
+        const selectedMembers =
+          await tx.member.findMany({
+            where: {
+              id: {
+                in: members,
+              },
+              groupId,
+            },
+          });
 
-  splitAmounts = selectedMembers.map((member) => {
+        if (
+          selectedMembers.length !== members.length
+        ) {
+          throw new Error(
+            "One or more selected members do not belong to this group."
+          );
+        }
 
-    const percent = Number(
-      percentageAmounts?.[member.id] ?? 0
-    );
+        const expense =
+          await tx.expense.create({
+            data: {
+              title: title.trim(),
+              amount: numericAmount,
+              category:
+                category?.trim() || "General",
+              notes: notes?.trim() || "",
+              splitType: splitType || "EQUAL",
+              groupId,
+              paidById: payer.userId
+                ? payer.userId
+                : dbUser.id,
+            },
+          });
 
-    total += percent;
+        const splitAmounts = calculateSplits({
+          amount: numericAmount,
+          splitType,
+          members: selectedMembers,
+          exactAmounts,
+          percentageAmounts,
+          shareAmounts,
+        });
 
-    return {
-      memberId: member.id,
-      amount: Number(
-        ((Number(amount) * percent) / 100).toFixed(2)
-      ),
-    };
+        await tx.expenseSplit.createMany({
+          data: splitAmounts.map((split) => ({
+            expenseId: expense.id,
+            memberId: split.memberId,
+            amount: split.amount,
+          })),
+        });
 
-  });
-
-  if (Math.abs(total - 100) > 0.01) {
-    throw new Error(
-      "Percentages must total 100."
-    );
-  }
-
-  break;
-}
-case "SHARES": {
-
-  let totalShares = 0;
-
-  selectedMembers.forEach((member) => {
-    totalShares += Number(
-      shareAmounts?.[member.id] ?? 0
-    );
-  });
-
-  if (totalShares <= 0) {
-    throw new Error(
-      "Total shares must be greater than zero."
-    );
-  }
-
-  splitAmounts = selectedMembers.map((member) => {
-
-    const shares = Number(
-      shareAmounts?.[member.id] ?? 0
-    );
-
-    return {
-      memberId: member.id,
-      amount: Number(
-        (
-          (Number(amount) * shares) /
-          totalShares
-        ).toFixed(2)
-      ),
-    };
-
-  });
-
-  break;
-}
-
-  default:
-    throw new Error(
-      "Unsupported split type."
-    );
-}
-
-      // Create ExpenseSplit records
-     await tx.expenseSplit.createMany({
-  data: splitAmounts.map((split) => ({
-    expenseId: expense.id,
-    memberId: split.memberId,
-    amount: split.amount,
-  })),
-});
-
-      return expense;
-    });
+        return expense;
+      });
 
     return NextResponse.json(result, {
       status: 201,
     });
+  } catch (error: any) {
+    console.error(
+      "CREATE EXPENSE ERROR:",
+      error
+    );
 
-  } catch (error: any)  {
-    console.error("CREATE EXPENSE ERROR:", error);
-return NextResponse.json(
-  {
-    message:
-      error.message ||
-      "Failed to create expense",
-  },
-  {
-    status: 500,
-  }
-);
+    if (error.message === "Unauthorized") {
+      return NextResponse.json(
+        { message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        message:
+          error.message ||
+          "Failed to create expense",
+      },
+      {
+        status: 500,
+      }
+    );
   }
 }
